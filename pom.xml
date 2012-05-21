@@ -12,7 +12,7 @@
 	
 	<groupId>hu.kazocsaba</groupId>
 	<artifactId>duration-format</artifactId>
-	<version>1.0.0</version>
+	<version>1.0.1-SNAPSHOT</version>
 	<packaging>jar</packaging>
 	<name>Duration Format</name>
 	<description>A small library for producing human-readable string representations of time durations.</description>
