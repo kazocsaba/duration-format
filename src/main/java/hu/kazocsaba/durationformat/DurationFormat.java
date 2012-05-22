@@ -137,70 +137,23 @@ public class DurationFormat {
 		"d"
 	};
 	/**
-	 * Returns {@code true} if the specified duration would produce only zero-valued fields.
-	 * @param time the duration
-	 * @param unit the time unit of the duration
-	 * @return {@code true} if only zero fields would be present in the formatted duration
+	 * Represents the range of time units which will be displayed. {@code mainIndex} is
+	 * the index of the highest unit, {@code lastIndex} is the index of the lowest.
 	 */
-	public boolean isDisplayedAsZero(long time, TimeUnit unit) {
-		return isDisplayedAsZero(unit.toNanos(time));
-	}
-	private boolean isDisplayedAsZero(long timeNano) {
-		int mainIndex;
-		if (mandatoryUnit==null) {
-			if (timeNano<NANO_COUNTS[1]*10)
-				mainIndex=0;
-			else if (timeNano<NANO_COUNTS[2]*10)
-				mainIndex=1;
-			else if (timeNano<NANO_COUNTS[3]*10)
-				mainIndex=2;
-			else if (timeNano<NANO_COUNTS[3]*100) // seconds up to 100 s
-				mainIndex=3;
-			else if (timeNano<NANO_COUNTS[4]*100) // minutes up to 100 m
-				mainIndex=4;
-			else if (timeNano<NANO_COUNTS[5]*100) // hours up to 100 h
-				mainIndex=5;
-			else
-				mainIndex=6;
-		} else {
-			mainIndex=UNITS.indexOf(mandatoryUnit);
+	private static final class TimeUnitRange {
+		private final int mainIndex, lastIndex;
+
+		private TimeUnitRange(int mainIndex, int lastIndex) {
+			this.mainIndex = mainIndex;
+			this.lastIndex = lastIndex;
 		}
-		int lastIndex=Math.max(0, mainIndex-levels+1);
-		if (lowestUnit!=null) {
-			int specifiedLastIndex=UNITS.indexOf(lowestUnit);
-			if (mandatoryUnit==null && mainIndex<specifiedLastIndex) {
-				// the automatic main unit is lower than the specified lowest; override it
-				lastIndex=specifiedLastIndex;
-				mainIndex=specifiedLastIndex;
-			} else {
-				lastIndex=Math.max(lastIndex, Math.min(specifiedLastIndex, mainIndex));
-			}
-		}
-		long timeInLastUnit=timeNano/NANO_COUNTS[lastIndex];
-		if (lastIndex>0) {
-			// round up if necessary
-			if (timeNano-timeInLastUnit*NANO_COUNTS[lastIndex]>=NANO_COUNTS[lastIndex]/2)
-				timeInLastUnit++;
-		}
-		return timeInLastUnit==0;
-	}
-	/**
-	 * Formats a duration.
-	 * @param time the duration
-	 * @param unit the time unit of the duration
-	 * @return the formatted string
-	 */
-	public String format(long time, TimeUnit unit) {
-		return format(unit.toNanos(time));
-	}
-	/**
-	 * Formats a duration.
-	 * @param timeNano the duration in nanoseconds
-	 * @return the formatted string
-	 */
-	public String format(long timeNano) {
-		// mainIndex will be the index of the highest time unit we use, lastIndex will specify the lowest
 		
+	}
+	/**
+	 * This function determines the range of time units that shall be used to display
+	 * the given time duration.
+	 */
+	private TimeUnitRange computeTimeUnitRange(long timeNano) {
 		int mainIndex;
 		if (mandatoryUnit==null) {
 			if (timeNano<NANO_COUNTS[1]*10)
@@ -232,27 +185,64 @@ public class DurationFormat {
 			}
 		}
 		if (lastIndex>mainIndex) throw new AssertionError("Error in DurationFormat; time="+timeNano+", mainIndex="+mainIndex+", lastIndex="+lastIndex);
-		long timeInLastUnit=timeNano/NANO_COUNTS[lastIndex];
-		if (lastIndex>0) {
+		return new TimeUnitRange(mainIndex, lastIndex);
+	}
+	/**
+	 * Returns {@code true} if the specified duration would produce only zero-valued fields.
+	 * @param time the duration
+	 * @param unit the time unit of the duration
+	 * @return {@code true} if only zero fields would be present in the formatted duration
+	 */
+	public boolean isDisplayedAsZero(long time, TimeUnit unit) {
+		return isDisplayedAsZero(unit.toNanos(time));
+	}
+	private boolean isDisplayedAsZero(long timeNano) {
+		TimeUnitRange timeUnitRange=computeTimeUnitRange(timeNano);
+		long timeInLastUnit=timeNano/NANO_COUNTS[timeUnitRange.lastIndex];
+		if (timeUnitRange.lastIndex>0) {
 			// round up if necessary
-			if (timeNano-timeInLastUnit*NANO_COUNTS[lastIndex]>=NANO_COUNTS[lastIndex]/2)
+			if (timeNano-timeInLastUnit*NANO_COUNTS[timeUnitRange.lastIndex]>=NANO_COUNTS[timeUnitRange.lastIndex]/2)
 				timeInLastUnit++;
 		}
-		long[] times=new long[mainIndex-lastIndex+1];
+		return timeInLastUnit==0;
+	}
+	/**
+	 * Formats a duration.
+	 * @param time the duration
+	 * @param unit the time unit of the duration
+	 * @return the formatted string
+	 */
+	public String format(long time, TimeUnit unit) {
+		return format(unit.toNanos(time));
+	}
+	/**
+	 * Formats a duration.
+	 * @param timeNano the duration in nanoseconds
+	 * @return the formatted string
+	 */
+	public String format(long timeNano) {
+		TimeUnitRange timeUnitRange=computeTimeUnitRange(timeNano);
+		long timeInLastUnit=timeNano/NANO_COUNTS[timeUnitRange.lastIndex];
+		if (timeUnitRange.lastIndex>0) {
+			// round up if necessary
+			if (timeNano-timeInLastUnit*NANO_COUNTS[timeUnitRange.lastIndex]>=NANO_COUNTS[timeUnitRange.lastIndex]/2)
+				timeInLastUnit++;
+		}
+		long[] times=new long[timeUnitRange.mainIndex-timeUnitRange.lastIndex+1];
 		times[0]=timeInLastUnit;
-		for (int level=lastIndex+1; level<=mainIndex; level++) {
-			times[level-lastIndex]=times[level-lastIndex-1]/CONV_NUM[level-1];
-			times[level-lastIndex-1]-=times[level-lastIndex]*CONV_NUM[level-1];
+		for (int level=timeUnitRange.lastIndex+1; level<=timeUnitRange.mainIndex; level++) {
+			times[level-timeUnitRange.lastIndex]=times[level-timeUnitRange.lastIndex-1]/CONV_NUM[level-1];
+			times[level-timeUnitRange.lastIndex-1]-=times[level-timeUnitRange.lastIndex]*CONV_NUM[level-1];
 		}
 		
 		// assemble the string
 		
 		StringBuilder sb=new StringBuilder();
 		boolean hasNonZero=false;
-		for (int level=mainIndex; level>=lastIndex; level--) {
-			hasNonZero=hasNonZero || (times[level-lastIndex]>0);
-			if (times[level-lastIndex]>0 || (hasNonZero ? !dropInnerZeroes : (!dropLeadingZeroes || level==lastIndex))) {
-				sb.append(times[level-lastIndex]);
+		for (int level=timeUnitRange.mainIndex; level>=timeUnitRange.lastIndex; level--) {
+			hasNonZero=hasNonZero || (times[level-timeUnitRange.lastIndex]>0);
+			if (times[level-timeUnitRange.lastIndex]>0 || (hasNonZero ? !dropInnerZeroes : (!dropLeadingZeroes || level==timeUnitRange.lastIndex))) {
+				sb.append(times[level-timeUnitRange.lastIndex]);
 				sb.append(' ');
 				sb.append(UNIT_STRING[level]);
 				sb.append(' ');
