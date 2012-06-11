@@ -29,9 +29,9 @@ Example
 
 Quick and dirty benchmarking:
 
-    long startTime = System.nanoTime();
+    long start = System.nanoTime();
     // run something
-    long endTime = System.nanoTime();
+    long end = System.nanoTime();
     System.out.println("Finished in " + new DurationFormat().format(end - start));
 
 Customizing the behaviour:
